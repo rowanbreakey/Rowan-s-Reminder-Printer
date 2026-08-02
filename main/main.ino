@@ -27,28 +27,15 @@ void handleNewMessages(int numNewMessages) {
     String sender_chat_id = String(bot.messages[i].chat_id);
     String text = bot.messages[i].text;
 
-    Serial.print("From ID: ");
-    Serial.println(sender_chat_id);
-    Serial.print("Text: ");
-    Serial.println(text);
-
-    // Security Check: Make sure only YOU can trigger the bot
-    if (sender_chat_id != CHAT_ID) {
-      Serial.println("Rejected unauthorized user!");
-      bot.sendMessage(sender_chat_id, "Unauthorized user.", "");
-      continue;
-    }
-
-    // Command Handlers
-    if (text == "/start") {
-      bot.sendMessage(CHAT_ID, "Printer Bot is online and ready!", "");
-    } 
-    else if (text == "/ping") {
-      bot.sendMessage(CHAT_ID, "Pong!", "");
-    } 
-    else {
-      bot.sendMessage(CHAT_ID, "You said: " + text, "");
-    }
+    Serial2.println("================================");
+    Serial2.println("  ROWAN'S REMINDER PRINTER  ");
+    Serial2.println("================================");
+    Serial2.print("Sent By: ");
+    Serial2.println(sender_chat_id);
+    Serial2.print("Message: ");
+    Serial2.println(text);
+    Serial2.println("--------------------------------");
+    Serial2.println("\n\n\n");
   }
 }
 
@@ -56,35 +43,39 @@ void setup() {
   Serial.begin(115200);
   delay(1000);
 
-  Serial.println("\n--- Starting ESP32 Telegram Test ---");
+  Serial2.begin(9600, SERIAL_8N1, 16, 17);
+  delay(200);
+  Serial2.write(0x1B);
+  Serial2.write(0x40);
+  delay(100);
 
-  // 1. Connect to Wi-Fi
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
   Serial.print("Connecting to WiFi");
+
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.print(".");
   }
+
   Serial.println("\nWiFi Connected!");
   Serial.print("IP Address: ");
   Serial.println(WiFi.localIP());
 
-  // 2. Attach Telegram Certificate
   client.setCACert(TELEGRAM_CERTIFICATE_ROOT);
 
-  // 3. Sync System Time via NTP (Required for HTTPS validation)
   Serial.print("Syncing Time");
   configTime(0, 0, "pool.ntp.org");
   time_t now = time(nullptr);
+
   while (now < 24 * 3600) {
     Serial.print(".");
     delay(500);
     now = time(nullptr);
   }
+
   Serial.println("\nTime Synced!");
 
-  // 4. Send Initial Boot Notification
   Serial.println("Sending boot message to Telegram...");
   bool sent = bot.sendMessage(CHAT_ID, "ESP32 initialized successfully!", "");
 
