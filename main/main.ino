@@ -4,13 +4,15 @@
 #include <ArduinoJson.h>
 #include <map>
 #include <chrono>
+#include <LiquidCrystal_I2C.h>
 #include "secrets.h"
 
 using namespace std;
 
-// Load credentials from secrets.h
 const char* ssid = SECRET_SSID;
 const char* password = SECRET_PASS;
+
+bool reset_disp = true;
 
 String super_user_state = "";
 String username_save = "";
@@ -23,18 +25,28 @@ std::map<String, String> user_dict;
 WiFiClientSecure client;
 UniversalTelegramBot bot(BOTtoken, client);
 
-// Check for new messages every 1 second
 const unsigned long BOT_MTBS = 1000; 
 unsigned long lastTimeBotRan = 0;
 
+#define I2C_SDA 21
+#define I2C_SCL 22
+
+LiquidCrystal_I2C lcd(0x27, 20, 4);
+
 void handleNewMessages(int numNewMessages) {
-  Serial.print("Processing ");
-  Serial.print(numNewMessages);
-  Serial.println(" message(s)...");
+
+  lcd.clear();
+  lcd.print("Processing:");
+  lcd.setCursor(0, 1);
+  lcd.print(numNewMessages);
+  lcd.print(" new message(s)...");
+  delay(500);
 
   for (int i = 0; i < numNewMessages; i++) {
     String sender_chat_id = String(bot.messages[i].chat_id);
     String text = bot.messages[i].text;
+
+    reset_disp = true;
 
     if (user_dict.contains(sender_chat_id)) {
       if (sender_chat_id == SUPER_USER_CHAT_ID && text == "/adduser" && super_user_state == "") {
@@ -86,46 +98,56 @@ void setup() {
   Serial2.write(0x40);
   delay(100);
 
+  Wire.begin(I2C_SDA, I2C_SCL);
+
+  lcd.init();
+  lcd.clear();
+  lcd.backlight();
+  lcd.setCursor(0, 0);
+
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
-  Serial.print("Connecting to WiFi");
+  lcd.print("Connecting to WiFi");
 
   user_dict[USER_ID] = "Rowan";
 
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
-    Serial.print(".");
+    lcd.print(".");
   }
 
-  Serial.println("\nWiFi Connected!");
-  Serial.print("IP Address: ");
-  Serial.println(WiFi.localIP());
+  lcd.clear();
+  lcd.print("WiFi Connected!");
+  delay(1000);
+  lcd.clear();
 
   client.setCACert(TELEGRAM_CERTIFICATE_ROOT);
 
-  Serial.print("Syncing Time");
+  lcd.print("Setting Up");
   configTzTime("EST5EDT,M3.2.0,M11.1.0", "pool.ntp.org");
   time_t now = time(nullptr);
 
   while (now < 24 * 3600) {
-    Serial.print(".");
+    lcd.print(".");
     delay(500);
     now = time(nullptr);
   }
 
-  Serial.println("\nTime Synced!");
+  lcd.clear();
+  lcd.print("Done!");
+  delay(500);
 
-  Serial.println("Sending boot message to Telegram...");
   bool sent = bot.sendMessage(SUPER_USER_CHAT_ID, "ESP32 initialized successfully!", "");
-
-  if (sent) {
-    Serial.println(">>> SUCCESS: Boot message delivered to your Telegram! <<<");
-  } else {
-    Serial.println(">>> ERROR: Delivery failed. Re-verify USER_ID string in secrets.h <<<");
-  }
 }
 
 void loop() {
+  if (reset_disp) {
+    lcd.clear();
+    lcd.print("Rowan's Reminder");
+    lcd.setCursor(0, 1);
+    lcd.print("Printer");
+    reset_disp = false;
+  }
   if (millis() - lastTimeBotRan > BOT_MTBS) {
     int numNewMessages = bot.getUpdates(bot.last_message_received + 1);
 
