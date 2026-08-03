@@ -3,6 +3,7 @@
 #include <UniversalTelegramBot.h>
 #include <ArduinoJson.h>
 #include <map>
+#include <chrono>
 #include "secrets.h"
 
 using namespace std;
@@ -48,13 +49,23 @@ void handleNewMessages(int numNewMessages) {
         bot.sendMessage(SUPER_USER_CHAT_ID, "New user initialized successfully.");
         super_user_state = "";
       } else {
+        time_t unix_time = (time_t) bot.messages[i].date.toInt();
+        struct tm* timeinfo = localtime(&unix_time);
+        char time_buf[64];
+        strftime(time_buf, sizeof(time_buf), "%Y-%m-%d %H:%M:%S", timeinfo);
+
         Serial2.println("================================");
         Serial2.println("  ROWAN'S REMINDER PRINTER  ");
         Serial2.println("================================");
+        Serial2.println("\n");
         Serial2.print("Sent By: ");
         Serial2.println(user_dict[sender_chat_id]);
+        Serial2.println("\n");
+        Serial2.print("Sent At: ");
+        Serial2.println(time_buf);
         Serial2.print("Message: ");
         Serial2.println(text);
+        Serial2.println("\n");
         Serial2.println("--------------------------------");
         Serial2.println("\n\n\n");
         bot.sendMessage(sender_chat_id, "Reminder sent successfully!");
@@ -93,7 +104,7 @@ void setup() {
   client.setCACert(TELEGRAM_CERTIFICATE_ROOT);
 
   Serial.print("Syncing Time");
-  configTime(0, 0, "pool.ntp.org");
+  configTzTime("EST5EDT,M3.2.0,M11.1.0", "pool.ntp.org");
   time_t now = time(nullptr);
 
   while (now < 24 * 3600) {
