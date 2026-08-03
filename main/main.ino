@@ -2,14 +2,22 @@
 #include <WiFiClientSecure.h>
 #include <UniversalTelegramBot.h>
 #include <ArduinoJson.h>
+#include <map>
 #include "secrets.h"
+
+using namespace std;
 
 // Load credentials from secrets.h
 const char* ssid = SECRET_SSID;
 const char* password = SECRET_PASS;
 
+String super_user_state = "";
+String username_save = "";
+
 #define BOTtoken PRINTER_BOT_TOKEN
-#define CHAT_ID USER_ID
+#define SUPER_USER_CHAT_ID USER_ID
+
+std::map<String, String> user_dict;
 
 WiFiClientSecure client;
 UniversalTelegramBot bot(BOTtoken, client);
@@ -27,15 +35,33 @@ void handleNewMessages(int numNewMessages) {
     String sender_chat_id = String(bot.messages[i].chat_id);
     String text = bot.messages[i].text;
 
-    Serial2.println("================================");
-    Serial2.println("  ROWAN'S REMINDER PRINTER  ");
-    Serial2.println("================================");
-    Serial2.print("Sent By: ");
-    Serial2.println(sender_chat_id);
-    Serial2.print("Message: ");
-    Serial2.println(text);
-    Serial2.println("--------------------------------");
-    Serial2.println("\n\n\n");
+    if (user_dict.contains(sender_chat_id)) {
+      if (sender_chat_id == SUPER_USER_CHAT_ID && text == "/adduser" && super_user_state == "") {
+        bot.sendMessage(SUPER_USER_CHAT_ID, "Please enter the name of the new user.");
+        super_user_state = "awaiting username";
+      } else if (sender_chat_id == SUPER_USER_CHAT_ID && super_user_state == "awaiting username") {
+        username_save = text;
+        bot.sendMessage(SUPER_USER_CHAT_ID, "Please enter the user id for " + text + ".");
+        super_user_state = "awaiting user id";
+      } else if (sender_chat_id == SUPER_USER_CHAT_ID && super_user_state == "awaiting user id") {
+        user_dict[text] = username_save;
+        bot.sendMessage(SUPER_USER_CHAT_ID, "New user initialized successfully.");
+        super_user_state = "";
+      } else {
+        Serial2.println("================================");
+        Serial2.println("  ROWAN'S REMINDER PRINTER  ");
+        Serial2.println("================================");
+        Serial2.print("Sent By: ");
+        Serial2.println(sender_chat_id);
+        Serial2.print("Message: ");
+        Serial2.println(text);
+        Serial2.println("--------------------------------");
+        Serial2.println("\n\n\n");
+        bot.sendMessage(sender_chat_id, "Reminder sent successfully!");
+      }
+    } else {
+      bot.sendMessage(sender_chat_id, "Sorry, you are not permited to send Rowan reminders.");
+    }
   }
 }
 
@@ -52,6 +78,8 @@ void setup() {
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
   Serial.print("Connecting to WiFi");
+
+  user_dict[USER_ID] = "Rowan";
 
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
@@ -77,7 +105,7 @@ void setup() {
   Serial.println("\nTime Synced!");
 
   Serial.println("Sending boot message to Telegram...");
-  bool sent = bot.sendMessage(CHAT_ID, "ESP32 initialized successfully!", "");
+  bool sent = bot.sendMessage(SUPER_USER_CHAT_ID, "ESP32 initialized successfully!", "");
 
   if (sent) {
     Serial.println(">>> SUCCESS: Boot message delivered to your Telegram! <<<");
