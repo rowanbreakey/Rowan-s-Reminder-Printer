@@ -52,7 +52,7 @@ void handleNewMessages(int numNewMessages) {
         Serial2.println("  ROWAN'S REMINDER PRINTER  ");
         Serial2.println("================================");
         Serial2.print("Sent By: ");
-        Serial2.println(sender_chat_id);
+        Serial2.println(user_dict[sender_chat_id]);
         Serial2.print("Message: ");
         Serial2.println(text);
         Serial2.println("--------------------------------");
