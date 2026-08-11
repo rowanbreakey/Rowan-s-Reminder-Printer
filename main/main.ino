@@ -64,6 +64,17 @@ void addUser(String uid, String name) {
   prefs.end();
 }
 
+bool removeUser(String uid) {
+  prefs.begin("users", false);
+  if (prefs.isKey(uid.c_str())) {
+    prefs.remove(uid.c_str());
+    prefs.end();
+    return true;
+  }
+  prefs.end();
+  return false;
+}
+
 void handleNewMessages(int numNewMessages) {
   lcd.clear();
   lcd.print("Processing:");
@@ -79,16 +90,27 @@ void handleNewMessages(int numNewMessages) {
     reset_disp = true;
 
     if (isVerified(sender_chat_id)) {
-      if (sender_chat_id == SUPER_USER_CHAT_ID && text == "/adduser" && super_user_state == "") {
+      if (sender_chat_id == SUPER_USER_CHAT_ID && text == "/addUser" && super_user_state == "") {
         bot.sendMessage(SUPER_USER_CHAT_ID, "Please enter the name of the new user.");
-        super_user_state = "awaiting username";
-      } else if (sender_chat_id == SUPER_USER_CHAT_ID && super_user_state == "awaiting username") {
+        super_user_state = "add - awaiting username";
+      } else if (sender_chat_id == SUPER_USER_CHAT_ID && super_user_state == "add - awaiting username") {
         username_save = text;
         bot.sendMessage(SUPER_USER_CHAT_ID, "Please enter the user id for " + text + ".");
-        super_user_state = "awaiting user id";
-      } else if (sender_chat_id == SUPER_USER_CHAT_ID && super_user_state == "awaiting user id") {
+        super_user_state = "add - awaiting user id";
+      } else if (sender_chat_id == SUPER_USER_CHAT_ID && super_user_state == "add - awaiting user id") {
         addUser(text, username_save);
         bot.sendMessage(SUPER_USER_CHAT_ID, "New user initialized successfully.");
+        super_user_state = "";
+      } else if (sender_chat_id == SUPER_USER_CHAT_ID && text == "/removeUser" && super_user_state == "") {
+        bot.sendMessage(SUPER_USER_CHAT_ID, "Please enter the user id of the user you would like to remove.");
+        super_user_state = "remove - awaiting user id";
+      } else if (sender_chat_id == SUPER_USER_CHAT_ID && super_user_state == "remove - awaiting user id") {
+        bool was_removed = removeUser(text);
+        if (was_removed) {
+          bot.sendMessage(SUPER_USER_CHAT_ID, "User successfully removed.");
+        } else {
+          bot.sendMessage(SUPER_USER_CHAT_ID, "The user id provided was not tied to a verified user.");
+        }
         super_user_state = "";
       } else {
         time_t unix_time = (time_t) bot.messages[i].date.toInt();
