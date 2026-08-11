@@ -121,17 +121,15 @@ void handleNewMessages(int numNewMessages) {
         Serial2.println("================================");
         Serial2.println("  ROWAN'S REMINDER PRINTER  ");
         Serial2.println("================================");
-        Serial2.println("\n");
         Serial2.print("Sent By: ");
         Serial2.println(getName(sender_chat_id));
-        Serial2.println("\n");
         Serial2.print("Sent At: ");
         Serial2.println(time_buf);
+        Serial2.println("\n");
         Serial2.print("Message: ");
         Serial2.println(text);
-        Serial2.println("\n");
         Serial2.println("--------------------------------");
-        Serial2.println("\n\n\n");
+        Serial2.println("\n\n");
         bot.sendMessage(sender_chat_id, "Reminder sent successfully!");
       }
     } else {
