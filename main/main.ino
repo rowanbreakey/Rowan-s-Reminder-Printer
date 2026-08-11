@@ -5,12 +5,15 @@
 #include <map>
 #include <chrono>
 #include <LiquidCrystal_I2C.h>
+#include <Preferences.h>
 #include "secrets.h"
 
 using namespace std;
 
 const char* ssid = SECRET_SSID;
 const char* password = SECRET_PASS;
+
+Preferences prefs;
 
 bool reset_disp = true;
 
@@ -33,8 +36,35 @@ unsigned long lastTimeBotRan = 0;
 
 LiquidCrystal_I2C lcd(0x27, 20, 4);
 
-void handleNewMessages(int numNewMessages) {
+bool isVerified(String uid) {
+  if (uid == SUPER_USER_CHAT_ID) {
+    return true;
+  }
 
+  prefs.begin("users", true);
+  String name = prefs.getString(uid.c_str(), "");
+  prefs.end();
+  return (name.length() > 0);
+}
+
+String getName(String uid) {
+  if (uid == SUPER_USER_CHAT_ID) {
+    return "Rowan";
+  }
+  prefs.begin("users", true);
+  String name = prefs.getString(uid.c_str(), "");
+  prefs.end();
+
+  return name;
+}
+
+void addUser(String uid, String name) {
+  prefs.begin("users", false);
+  prefs.putString(uid.c_str(), name);
+  prefs.end();
+}
+
+void handleNewMessages(int numNewMessages) {
   lcd.clear();
   lcd.print("Processing:");
   lcd.setCursor(0, 1);
@@ -48,7 +78,7 @@ void handleNewMessages(int numNewMessages) {
 
     reset_disp = true;
 
-    if (user_dict.contains(sender_chat_id)) {
+    if (isVerified(sender_chat_id)) {
       if (sender_chat_id == SUPER_USER_CHAT_ID && text == "/adduser" && super_user_state == "") {
         bot.sendMessage(SUPER_USER_CHAT_ID, "Please enter the name of the new user.");
         super_user_state = "awaiting username";
@@ -57,7 +87,7 @@ void handleNewMessages(int numNewMessages) {
         bot.sendMessage(SUPER_USER_CHAT_ID, "Please enter the user id for " + text + ".");
         super_user_state = "awaiting user id";
       } else if (sender_chat_id == SUPER_USER_CHAT_ID && super_user_state == "awaiting user id") {
-        user_dict[text] = username_save;
+        addUser(text, username_save);
         bot.sendMessage(SUPER_USER_CHAT_ID, "New user initialized successfully.");
         super_user_state = "";
       } else {
@@ -71,7 +101,7 @@ void handleNewMessages(int numNewMessages) {
         Serial2.println("================================");
         Serial2.println("\n");
         Serial2.print("Sent By: ");
-        Serial2.println(user_dict[sender_chat_id]);
+        Serial2.println(getName(sender_chat_id));
         Serial2.println("\n");
         Serial2.print("Sent At: ");
         Serial2.println(time_buf);
@@ -108,8 +138,6 @@ void setup() {
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
   lcd.print("Connecting to WiFi");
-
-  user_dict[USER_ID] = "Rowan";
 
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
