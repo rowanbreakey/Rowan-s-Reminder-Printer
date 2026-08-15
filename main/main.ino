@@ -16,6 +16,7 @@ const char* password = SECRET_PASS;
 Preferences prefs;
 
 bool reset_disp = true;
+bool backlight = true;
 
 String super_user_state = "";
 String username_save = "";
@@ -33,6 +34,9 @@ unsigned long lastTimeBotRan = 0;
 
 #define I2C_SDA 21
 #define I2C_SCL 22
+
+const int SWITCH_PIN = 4;
+bool on = true;
 
 LiquidCrystal_I2C lcd(0x27, 20, 4);
 
@@ -113,24 +117,28 @@ void handleNewMessages(int numNewMessages) {
         }
         super_user_state = "";
       } else {
-        time_t unix_time = (time_t) bot.messages[i].date.toInt();
-        struct tm* timeinfo = localtime(&unix_time);
-        char time_buf[64];
-        strftime(time_buf, sizeof(time_buf), "%Y-%m-%d %H:%M:%S", timeinfo);
+        if (on) {
+          time_t unix_time = (time_t) bot.messages[i].date.toInt();
+          struct tm* timeinfo = localtime(&unix_time);
+          char time_buf[64];
+          strftime(time_buf, sizeof(time_buf), "%Y-%m-%d %H:%M:%S", timeinfo);
 
-        Serial2.println("================================");
-        Serial2.println("  ROWAN'S REMINDER PRINTER  ");
-        Serial2.println("================================");
-        Serial2.print("Sent By: ");
-        Serial2.println(getName(sender_chat_id));
-        Serial2.print("Sent At: ");
-        Serial2.println(time_buf);
-        Serial2.println("\n");
-        Serial2.print("Message: ");
-        Serial2.println(text);
-        Serial2.println("--------------------------------");
-        Serial2.println("\n\n");
-        bot.sendMessage(sender_chat_id, "Reminder sent successfully!");
+          Serial2.println("================================");
+          Serial2.println("  ROWAN'S REMINDER PRINTER  ");
+          Serial2.println("================================");
+          Serial2.print("Sent By: ");
+          Serial2.println(getName(sender_chat_id));
+          Serial2.print("Sent At: ");
+          Serial2.println(time_buf);
+          Serial2.println("\n");
+          Serial2.print("Message: ");
+          Serial2.println(text);
+          Serial2.println("--------------------------------");
+          Serial2.println("\n\n");
+          bot.sendMessage(sender_chat_id, "Reminder sent successfully!");
+        } else {
+          bot.sendMessage(sender_chat_id, "Sorry! Rowan isn't accepting reminders right now.");
+        }
       }
     } else {
       bot.sendMessage(sender_chat_id, "Sorry, you are not permited to send Rowan reminders.");
@@ -141,6 +149,8 @@ void handleNewMessages(int numNewMessages) {
 void setup() {
   Serial.begin(115200);
   delay(1000);
+
+  pinMode(SWITCH_PIN, INPUT_PULLUP);
 
   Serial2.begin(9600, SERIAL_8N1, 16, 17);
   delay(200);
@@ -189,13 +199,31 @@ void setup() {
 }
 
 void loop() {
-  if (reset_disp) {
-    lcd.clear();
-    lcd.print("Rowan's Reminder");
-    lcd.setCursor(0, 1);
-    lcd.print("Printer");
-    reset_disp = false;
+  int switch_state = digitalRead(SWITCH_PIN);
+
+  if (switch_state == LOW) {
+    on = true;
+  } else {
+    on = false;
   }
+
+  if (!on) {
+    if (backlight) {
+      lcd.clear();
+      lcd.noBacklight();
+      backlight = false;
+      reset_disp = true;
+    }
+  } else if (reset_disp) {
+      lcd.backlight();
+      backlight = true;
+      lcd.clear();
+      lcd.print("Rowan's Reminder");
+      lcd.setCursor(0, 1);
+      lcd.print("Printer");
+      reset_disp = false;
+    }
+
   if (millis() - lastTimeBotRan > BOT_MTBS) {
     int numNewMessages = bot.getUpdates(bot.last_message_received + 1);
 
