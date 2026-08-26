@@ -31,5 +31,7 @@
     "--background-index",
     "--query-driver=**",
     "--compile-commands-dir=c:\\Users\\rowan\\Programs\\Personal Projects\\rowans-reminder-printer\\idf-version\\rowans-reminder-printer\\build"
-  ]
+  ],
+  "idf.flashType": "UART",
+  "idf.portWin": "COM3"
 }
