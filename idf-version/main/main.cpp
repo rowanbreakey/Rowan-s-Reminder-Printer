@@ -6,6 +6,7 @@
 #include "esp_log.h"
 #include "nvs_flash.h"
 #include "secrets.h"
+#include "telegram_client.h"
 
 /*
 plan:
@@ -20,6 +21,8 @@ plan:
 
 static EventGroupHandle_t s_wifi_event_group;
 #define WIFI_CONNECTED_BIT BIT0
+
+TelegramClient telegram(PRINTER_BOT_TOKEN);
 
 void init_nvs(void) {
     esp_err_t ret = nvs_flash_init();
@@ -75,4 +78,5 @@ extern "C" void app_main(void)
     xEventGroupWaitBits(s_wifi_event_group, WIFI_CONNECTED_BIT, pdFALSE, pdTRUE, portMAX_DELAY);
 
     ESP_LOGI("MAIN", "WIFI CONNECTED!!!!");
+    telegram.sendMessage("ESP32 Connected and Ready to Receive Messages.", SUPER_USER_ID);
 }
