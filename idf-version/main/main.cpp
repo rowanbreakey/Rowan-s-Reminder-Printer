@@ -1,6 +1,8 @@
 #include <cstring>
+#include <stdio.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/event_groups.h"
+#include "freertos/queue.h"
 #include "esp_wifi.h"
 #include "esp_event.h"
 #include "esp_log.h"
@@ -23,6 +25,8 @@ static EventGroupHandle_t s_wifi_event_group;
 #define WIFI_CONNECTED_BIT BIT0
 
 TelegramClient telegram(PRINTER_BOT_TOKEN);
+QueueHandle_t telegramQueue = xQueueCreate(10, sizeof(TelegramMessage));
+long offset = 0;
 
 void init_nvs(void) {
     esp_err_t ret = nvs_flash_init();
@@ -67,7 +71,22 @@ void init_wifi(void) {
     ESP_ERROR_CHECK(esp_wifi_start());
 }
 
+void get_new_messages_task(void *pvParameters) {
+    while (1) {
+        telegram.getMessages(telegramQueue, offset);
+        vTaskDelay(pdMS_TO_TICKS(1000));
+    }
+}
 
+void handle_queued_messages_task(void *pvParameters) {
+    TelegramMessage incomingMsg;
+
+    while (1) {
+        if (xQueueReceive(telegramQueue, &incomingMsg, portMAX_DELAY) == pdPASS) {
+            puts(incomingMsg.text);
+        }
+    }
+}
 
 extern "C" void app_main(void)
 {
@@ -79,4 +98,7 @@ extern "C" void app_main(void)
 
     ESP_LOGI("MAIN", "WIFI CONNECTED!!!!");
     telegram.sendMessage("ESP32 Connected and Ready to Receive Messages.", SUPER_USER_ID);
+
+    xTaskCreate(get_new_messages_task, "TelegramMessageGetterTask", 4096, NULL, 2, NULL);
+    xTaskCreate(handle_queued_messages_task, "MessageHandlerTask", 4096, NULL, 1, NULL);
 }
