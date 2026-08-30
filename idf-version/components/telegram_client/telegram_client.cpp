@@ -13,6 +13,19 @@
 #include "cJSON.h"
 #include "esp_crt_bundle.h"
 
+static esp_err_t update_event_handler(esp_http_client_event_t *evt) {
+    switch (evt->event_id) {
+        case HTTP_EVENT_ON_DATA:
+            if (evt->user_data) {
+                ((std::string*)evt->user_data)->append((char*)evt->data, evt->data_len);
+            }
+            break;
+        default:
+            break;
+    }
+    return ESP_OK;
+}
+
 TelegramClient::TelegramClient(const char* my_token) 
     : token(my_token) {
     ESP_LOGI("TELEGRAM CLIENT", "Telegram client initialized");
@@ -35,16 +48,79 @@ esp_err_t TelegramClient::sendMessage(const char* message, const char* chat_id) 
     esp_err_t err = esp_http_client_perform(client);
     esp_http_client_cleanup(client);
 
-    return ESP_OK;
+    return err;
 }
 
-esp_err_t TelegramClient::getMessages() {
+esp_err_t TelegramClient::getMessages(QueueHandle_t messageQueue, long &offset) {
+    std::string url = std::format("https://api.telegram.org/bot{}/getUpdates?offset={}&timeout=5", this->token, offset);
+    std::string response_data = "";
+
     esp_http_client_config_t config = {};
-    config.url = "https://api.telegram.org/bot123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11/getUpdates";
+    config.url = url.c_str();
     config.method = HTTP_METHOD_GET;
+    config.crt_bundle_attach = esp_crt_bundle_attach;
+    config.event_handler = update_event_handler;
+    config.user_data = &response_data;
 
     esp_http_client_handle_t client = esp_http_client_init(&config);
-    esp_http_client_perform(client);
+    esp_err_t err = esp_http_client_perform(client);
     esp_http_client_cleanup(client);
+
+    if (err != ESP_OK || response_data.empty()) {
+        return ESP_FAIL;
+    }
+
+    cJSON *root = cJSON_Parse(response_data.c_str());
+    if (!root) {
+        return ESP_FAIL;
+    }
+
+    cJSON *ok = cJSON_GetObjectItem(root, "ok");
+    if (!cJSON_IsTrue(ok)) {
+        cJSON_Delete(root);
+        return ESP_FAIL;
+    }
+
+    cJSON *result = cJSON_GetObjectItem(root, "result");
+    int arraySize = cJSON_GetArraySize(result);
+    
+    if (arraySize == 0) {
+        cJSON_Delete(root);
+        return ESP_ERR_NOT_FOUND;
+    }
+
+    for (int i = 0; i < arraySize; i++) {
+        cJSON *update = cJSON_GetArrayItem(result, i);
+        cJSON *updateIdObj = cJSON_GetObjectItem(update, "update_id");
+        cJSON *messageObj = cJSON_GetObjectItem(update, "message");
+
+        if (messageObj) {
+            TelegramMessage outMessage = {};
+            cJSON *textObj = cJSON_GetObjectItem(messageObj, "text");
+            cJSON *fromObj = cJSON_GetObjectItem(messageObj, "from");
+            cJSON *dateObj = cJSON_GetObjectItem(messageObj, "date");
+
+            if (textObj && textObj->valuestring) {
+                strncpy(outMessage.text, textObj->valuestring, sizeof(outMessage.text) - 1);
+                outMessage.text[sizeof(outMessage.text) - 1] = '\0';            }
+            if (fromObj) {
+                cJSON *idObj = cJSON_GetObjectItem(fromObj, "id");
+                if (idObj) {
+                    outMessage.senderId = (long)idObj->valuedouble;
+                }
+            }
+            if (dateObj) {
+                outMessage.timeStamp = (long)dateObj->valuedouble;
+            }
+            if (updateIdObj) {
+                outMessage.updateId = (long)updateIdObj->valuedouble;
+                offset = outMessage.updateId + 1; // Advance offset past highest ID processed
+            }
+
+            xQueueSend(messageQueue, &outMessage, 0);
+        }
+    }
+
     return ESP_OK;
+
 }
