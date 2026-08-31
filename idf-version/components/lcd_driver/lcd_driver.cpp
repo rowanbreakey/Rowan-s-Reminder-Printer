@@ -38,6 +38,7 @@ void LCD::write_byte(uint8_t data, uint8_t mode) {
     bytes[3] = low_nibble  | mode | backlight_state;
 
     i2c_master_transmit(lcd_handle, bytes, 4, pdMS_TO_TICKS(100));
+    vTaskDelay(pdMS_TO_TICKS(5));
 }
 
 esp_err_t LCD::init_lcd() {
@@ -80,6 +81,7 @@ esp_err_t LCD::set_cursor(int row, int col) {
 
     uint8_t location = 0x80 + rows[row] + col;
     write_byte(location, 0);
+    vTaskDelay(pdMS_TO_TICKS(5));
 
     return ESP_OK;
 }
@@ -92,12 +94,15 @@ esp_err_t LCD::write(const char* text) {
     return ESP_OK;
 }
 
-esp_err_t LCD::backlight() {
-    if (backlight_state == LCD_BACKLIGHT) {
-        backlight_state = 0x00;
-    } else {
-        backlight_state = LCD_BACKLIGHT;
-    }
+esp_err_t LCD::backlight_off() {
+    backlight_state = 0x00;
+    return i2c_master_transmit(lcd_handle, &backlight_state, 1, pdMS_TO_TICKS(100));
+    vTaskDelay(pdMS_TO_TICKS(5));
+}
+
+esp_err_t LCD::backlight_on() {
+    backlight_state = LCD_BACKLIGHT;
 
     return i2c_master_transmit(lcd_handle, &backlight_state, 1, pdMS_TO_TICKS(100));
+    vTaskDelay(pdMS_TO_TICKS(5));
 }

@@ -31,7 +31,11 @@ long offset = 0;
 
 gpio_num_t sda = GPIO_NUM_21;
 gpio_num_t scl = GPIO_NUM_22;
-LCD lcd(sda, scl, 0x27);
+LCD* lcd = nullptr;
+
+#define TOGGLE_PIN GPIO_NUM_4
+int state = 0;
+int last_state = 0;
 
 void init_nvs(void) {
     esp_err_t ret = nvs_flash_init();
@@ -89,29 +93,93 @@ void handle_queued_messages_task(void *pvParameters) {
     while (1) {
         if (xQueueReceive(telegramQueue, &incomingMsg, portMAX_DELAY) == pdPASS) {
             puts(incomingMsg.text);
+            //when this actually does different things based on the message it must send back that i am not taking messages if state is 0 (off)
         }
+    }
+}
+
+void print_default() {
+    lcd->clear();
+    vTaskDelay(pdMS_TO_TICKS(10));
+    lcd->set_cursor(0, 0);
+    vTaskDelay(pdMS_TO_TICKS(10));
+    lcd->write("Rowan's");
+    vTaskDelay(pdMS_TO_TICKS(10));
+    lcd->set_cursor(1, 0);
+    vTaskDelay(pdMS_TO_TICKS(10));
+    lcd->write("Reminder");
+    vTaskDelay(pdMS_TO_TICKS(10));
+    lcd->set_cursor(2, 0);
+    vTaskDelay(pdMS_TO_TICKS(10));
+    lcd->write("Printer");
+    vTaskDelay(pdMS_TO_TICKS(10));
+}
+
+void init_switch() {
+    gpio_config_t io_conf = {};
+    io_conf.pin_bit_mask = (1ULL << TOGGLE_PIN);
+    io_conf.mode = GPIO_MODE_INPUT;
+    io_conf.pull_up_en = GPIO_PULLUP_ENABLE;
+    io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
+    io_conf.intr_type = GPIO_INTR_DISABLE; 
+    
+    gpio_config(&io_conf);
+    state = gpio_get_level(TOGGLE_PIN);
+    last_state = !state;
+}
+
+void check_toggle_state_task(void* pvParameters) {
+    while (1) {
+        state = gpio_get_level(TOGGLE_PIN);
+
+        if (state != last_state && state == 0) {
+            lcd->clear();
+            vTaskDelay(pdMS_TO_TICKS(10));
+            lcd->backlight_on();
+            vTaskDelay(pdMS_TO_TICKS(10));
+            print_default();
+        } else if (state != last_state && state == 1) {
+            lcd->clear();
+            vTaskDelay(pdMS_TO_TICKS(10));
+            lcd->backlight_off();
+        }
+
+        last_state = state;
     }
 }
 
 extern "C" void app_main(void)
 {
+    lcd = new LCD(sda, scl, 0x27);
+    lcd->init_lcd();
+    vTaskDelay(pdMS_TO_TICKS(10));
+    lcd->clear();
+    vTaskDelay(pdMS_TO_TICKS(10));
+    lcd->set_cursor(0, 0);
+    vTaskDelay(pdMS_TO_TICKS(10));
+    lcd->backlight_on();
+    vTaskDelay(pdMS_TO_TICKS(10));
+    lcd->write("Connecting to Wifi...");
+    vTaskDelay(pdMS_TO_TICKS(10));
+
     init_nvs();
 
     init_wifi();
 
     xEventGroupWaitBits(s_wifi_event_group, WIFI_CONNECTED_BIT, pdFALSE, pdTRUE, portMAX_DELAY);
 
-    ESP_LOGI("MAIN", "WIFI CONNECTED!!!!");
+    ESP_LOGI("MAIN", "WIFI CONNECTED");
+    lcd->clear();
+    vTaskDelay(pdMS_TO_TICKS(10));
+    lcd->set_cursor(0, 0);
+    vTaskDelay(pdMS_TO_TICKS(10));
+    lcd->write("Connected!");
+    vTaskDelay(pdMS_TO_TICKS(10));
     telegram.sendMessage("ESP32 Connected and Ready to Receive Messages.", SUPER_USER_ID);
 
-    lcd.init_lcd();
-    lcd.clear();
-    lcd.backlight();
-    vTaskDelay(pdMS_TO_TICKS(1000));
-    lcd.backlight();
-    lcd.set_cursor(0, 0);
-    lcd.write("Hello World");
+    init_switch();
 
     xTaskCreate(get_new_messages_task, "TelegramMessageGetterTask", 4096, NULL, 2, NULL);
     xTaskCreate(handle_queued_messages_task, "MessageHandlerTask", 4096, NULL, 1, NULL);
+    xTaskCreate(check_toggle_state_task, "ToggleSwitchStateTask", 4096, NULL, 3, NULL);
 }

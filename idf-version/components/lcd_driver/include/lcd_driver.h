@@ -16,7 +16,9 @@ class LCD {
 
         esp_err_t write(const char* text);
 
-        esp_err_t backlight();
+        esp_err_t backlight_on();
+
+        esp_err_t backlight_off();
     private:
         gpio_num_t sda;
         gpio_num_t scl;
