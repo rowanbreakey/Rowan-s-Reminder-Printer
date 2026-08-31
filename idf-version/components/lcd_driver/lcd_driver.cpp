@@ -9,9 +9,8 @@
 #define LCD_BACKLIGHT 0x08
 #define LCD_EN        0x04
 #define LCD_RS        0x01
-
 LCD::LCD(gpio_num_t sda, gpio_num_t scl, uint8_t address)
-    : sda(sda), scl(scl), address(address), i2c_bus(nullptr), lcd_handle(nullptr) {
+    : sda(sda), scl(scl), address(address), i2c_bus(nullptr), lcd_handle(nullptr), backlight_state(LCD_BACKLIGHT) {
         i2c_master_bus_config_t bus_config = {};
         bus_config.i2c_port = I2C_NUM_0;
         bus_config.sda_io_num = sda;
@@ -33,10 +32,10 @@ void LCD::write_byte(uint8_t data, uint8_t mode) {
     uint8_t low_nibble = (data << 4) & 0xF0;
 
     uint8_t bytes[4];
-    bytes[0] = high_nibble | mode | LCD_BACKLIGHT | LCD_EN;
-    bytes[1] = high_nibble | mode | LCD_BACKLIGHT;
-    bytes[2] = low_nibble  | mode | LCD_BACKLIGHT | LCD_EN;
-    bytes[3] = low_nibble  | mode | LCD_BACKLIGHT;
+    bytes[0] = high_nibble | mode | backlight_state | LCD_EN;
+    bytes[1] = high_nibble | mode | backlight_state;
+    bytes[2] = low_nibble  | mode | backlight_state | LCD_EN;
+    bytes[3] = low_nibble  | mode | backlight_state;
 
     i2c_master_transmit(lcd_handle, bytes, 4, pdMS_TO_TICKS(100));
 }
@@ -63,17 +62,42 @@ esp_err_t LCD::init_lcd() {
 }
 
 esp_err_t LCD::clear() {
+    write_byte(0x01, 0);
+    vTaskDelay(pdMS_TO_TICKS(5));
     return ESP_OK;
 }
 
 esp_err_t LCD::set_cursor(int row, int col) {
+    const uint8_t rows[] = {0x00, 0x40, 0x14, 0x54};
+
+    if (row > 3) {
+        row = 3;
+    }
+
+    if (col > 19) {
+        col = 19;
+    }
+
+    uint8_t location = 0x80 + rows[row] + col;
+    write_byte(location, 0);
+
     return ESP_OK;
 }
 
 esp_err_t LCD::write(const char* text) {
+    while (*text) {
+        write_byte(*text, LCD_RS);
+        text++;
+    }
     return ESP_OK;
 }
 
 esp_err_t LCD::backlight() {
-    return ESP_OK;
+    if (backlight_state == LCD_BACKLIGHT) {
+        backlight_state = 0x00;
+    } else {
+        backlight_state = LCD_BACKLIGHT;
+    }
+
+    return i2c_master_transmit(lcd_handle, &backlight_state, 1, pdMS_TO_TICKS(100));
 }

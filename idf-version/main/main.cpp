@@ -9,6 +9,7 @@
 #include "nvs_flash.h"
 #include "secrets.h"
 #include "telegram_client.h"
+#include "lcd_driver.h"
 
 /*
 plan:
@@ -27,6 +28,10 @@ static EventGroupHandle_t s_wifi_event_group;
 TelegramClient telegram(PRINTER_BOT_TOKEN);
 QueueHandle_t telegramQueue = xQueueCreate(10, sizeof(TelegramMessage));
 long offset = 0;
+
+gpio_num_t sda = GPIO_NUM_21;
+gpio_num_t scl = GPIO_NUM_22;
+LCD lcd(sda, scl, 0x27);
 
 void init_nvs(void) {
     esp_err_t ret = nvs_flash_init();
@@ -98,6 +103,14 @@ extern "C" void app_main(void)
 
     ESP_LOGI("MAIN", "WIFI CONNECTED!!!!");
     telegram.sendMessage("ESP32 Connected and Ready to Receive Messages.", SUPER_USER_ID);
+
+    lcd.init_lcd();
+    lcd.clear();
+    lcd.backlight();
+    vTaskDelay(pdMS_TO_TICKS(1000));
+    lcd.backlight();
+    lcd.set_cursor(0, 0);
+    lcd.write("Hello World");
 
     xTaskCreate(get_new_messages_task, "TelegramMessageGetterTask", 4096, NULL, 2, NULL);
     xTaskCreate(handle_queued_messages_task, "MessageHandlerTask", 4096, NULL, 1, NULL);
