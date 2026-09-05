@@ -10,6 +10,7 @@
 #include "secrets.h"
 #include "telegram_client.h"
 #include "lcd_driver.h"
+#include "printer_driver.h"
 
 /*
 plan:
@@ -32,6 +33,10 @@ long offset = 0;
 gpio_num_t sda = GPIO_NUM_21;
 gpio_num_t scl = GPIO_NUM_22;
 LCD* lcd = nullptr;
+
+gpio_num_t tx = GPIO_NUM_17;
+gpio_num_t rx = GPIO_NUM_16;
+Printer* printer = nullptr;
 
 #define TOGGLE_PIN GPIO_NUM_4
 int state = 0;
@@ -93,6 +98,9 @@ void handle_queued_messages_task(void *pvParameters) {
     while (1) {
         if (xQueueReceive(telegramQueue, &incomingMsg, portMAX_DELAY) == pdPASS) {
             puts(incomingMsg.text);
+            printer->print_line(incomingMsg.text);
+            printer->print_line("\n\n");
+            vTaskDelay(pdMS_TO_TICKS(200));
             //when this actually does different things based on the message it must send back that i am not taking messages if state is 0 (off)
         }
     }
@@ -148,8 +156,9 @@ void check_toggle_state_task(void* pvParameters) {
     }
 }
 
-extern "C" void app_main(void)
-{
+extern "C" void app_main(void) {
+    printer = new Printer(tx, rx, 9600);
+
     lcd = new LCD(sda, scl, 0x27);
     lcd->init_lcd();
     vTaskDelay(pdMS_TO_TICKS(10));

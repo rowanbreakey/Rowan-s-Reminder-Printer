@@ -23,5 +23,6 @@ Printer::Printer(gpio_num_t tx, gpio_num_t rx, int baud_rate)
 
 esp_err_t Printer::print_line(const char* text) {
     uart_write_bytes(PORT_NUM, text, strlen(text));
+    uart_write_bytes(PORT_NUM, "\n", 1);
     return ESP_OK;
 }
