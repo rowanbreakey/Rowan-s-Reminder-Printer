@@ -7,6 +7,7 @@
 #include "esp_event.h"
 #include "esp_log.h"
 #include "nvs_flash.h"
+#include "nvs.h"
 #include "secrets.h"
 #include "telegram_client.h"
 #include "lcd_driver.h"
@@ -38,9 +39,14 @@ gpio_num_t tx = GPIO_NUM_17;
 gpio_num_t rx = GPIO_NUM_16;
 Printer* printer = nullptr;
 
+nvs_handle_t allowed_users;
+
 #define TOGGLE_PIN GPIO_NUM_4
 int state = 0;
 int last_state = 0;
+
+std::string super_user_state = "";
+std::string username_save = "";
 
 void init_nvs(void) {
     esp_err_t ret = nvs_flash_init();
@@ -49,6 +55,13 @@ void init_nvs(void) {
         ret = nvs_flash_init();
     }
     ESP_ERROR_CHECK(ret);
+
+    esp_err_t err = nvs_open("storage", NVS_READWRITE, &allowed_users);
+    if (err != ESP_OK) {
+        printf("Error (%s) opening NVS handle!\n", esp_err_to_name(err));
+    } else {
+        printf("Done Opening NVS handle\n");
+    }
 }
 
 static void event_handler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data) {
@@ -102,8 +115,75 @@ void handle_queued_messages_task(void *pvParameters) {
             printer->print_line("\n\n");
             vTaskDelay(pdMS_TO_TICKS(200));
             //when this actually does different things based on the message it must send back that i am not taking messages if state is 0 (off)
+            std::string sender_chat_id_std_string = std::to_string(incomingMsg.senderId);
+            const char* sender_chat_id = sender_chat_id_std_string.c_str();
+            const char* text = incomingMsg.text;
+
+            if (is_verified(sender_chat_id)) {
+                if (sender_chat_id == SUPER_USER_ID && text == "/addUser" && super_user_state == "") {
+                    telegram.sendMessage("Please enter the name of the new user.", SUPER_USER_ID);
+                    super_user_state = "add - awaiting username";
+                } else if (sender_chat_id == SUPER_USER_ID && super_user_state == "add - awaiting username") {
+                    username_save = text;
+                    telegram.sendMessage((std::string("Please enter the user id for ") + text + ".").c_str(), SUPER_USER_ID);
+                    super_user_state = "add - awaiting user id";
+                } else if (sender_chat_id == SUPER_USER_ID && super_user_state == "add - awaiting user id") {
+                    add_user(text, username_save.c_str());
+                    telegram.sendMessage("New user initialized successfully.", SUPER_USER_ID);
+                    super_user_state = "";
+                } else if (sender_chat_id == SUPER_USER_ID && text == "/removeUser" && super_user_state == "") {
+                    telegram.sendMessage("Please enter the user id of the user you would like to remove.", SUPER_USER_ID);
+                    super_user_state = "remove - awaiting user id";
+                } else if (sender_chat_id == SUPER_USER_ID && super_user_state == "remove - awaiting user id") {
+                    bool was_removed = remove_user(text);
+                    if (was_removed) {
+                    telegram.sendMessage(SUPER_USER_ID, "User successfully removed.");
+                    } else {
+                    telegram.sendMessage(SUPER_USER_ID, "The user id provided was not tied to a verified user.");
+                    }
+                    super_user_state = "";
+                } else {
+                    if (state) {
+                        std::string time_str = std::to_string(incomingMsg.timeStamp);
+                        const char* time = time_str.c_str();
+                        printer->print_line("================================");
+                        printer->print_line("  ROWAN'S REMINDER PRINTER  ");
+                        printer->print_line("================================");
+                        printer->print_line("Sent By: ");
+                        printer->print_line(get_name(sender_chat_id));
+                        printer->print_line("Sent At: ");
+                        printer->print_line(time);
+                        printer->print_line("\n");
+                        printer->print_line("Message: ");
+                        printer->print_line(incomingMsg.text);
+                        printer->print_line("--------------------------------");
+                        printer->print_line("\n\n");
+                        telegram.sendMessage("Reminder sent successfully!", sender_chat_id);
+                    } else {
+                        telegram.sendMessage("Sorry! Rowan isn't accepting reminders right now.", sender_chat_id);
+                    }
+                }
+            } else {
+                telegram.sendMessage("Sorry, you are not permited to send Rowan reminders.", sender_chat_id);
+            }
         }
     }
+}
+
+bool is_verified(const char* uid) {
+
+}
+
+void add_user(const char* username, const char* uid) {
+
+}
+
+bool remove_user(const char* uid) {
+
+}
+
+const char* get_name(const char* uid) {
+
 }
 
 void print_default() {
