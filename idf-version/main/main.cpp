@@ -98,6 +98,46 @@ void init_wifi(void) {
     ESP_ERROR_CHECK(esp_wifi_start());
 }
 
+bool is_verified(const char* uid) {
+    size_t required_size = 0;
+    esp_err_t err = nvs_get_str(allowed_users, uid, NULL, &required_size);
+    if (err == ESP_OK) {
+        return true;
+    } else {
+        return false;
+    }
+}
+
+void add_user(const char* username, const char* uid) {
+    nvs_set_str(allowed_users, uid, username);
+    nvs_commit(allowed_users);
+}
+
+bool remove_user(const char* uid) {
+    esp_err_t err = nvs_erase_key(allowed_users, uid);
+    if (err == ESP_OK) {
+        return true;
+    } else { 
+        return false;
+    } 
+}
+
+const char* get_name(const char* uid) {
+    size_t required_size = 0;
+    esp_err_t err = nvs_get_str(allowed_users, uid, NULL, &required_size);
+    if (err == ESP_OK) {
+        char* username = (char* )malloc(required_size);
+        if (username != NULL) {
+            nvs_get_str(allowed_users, uid, username, &required_size);
+            return username;
+        } else {
+            return "Unknown User";
+        }
+    }
+
+    return "Unknown User";
+}
+
 void get_new_messages_task(void *pvParameters) {
     while (1) {
         telegram.getMessages(telegramQueue, offset);
@@ -120,21 +160,21 @@ void handle_queued_messages_task(void *pvParameters) {
             const char* text = incomingMsg.text;
 
             if (is_verified(sender_chat_id)) {
-                if (sender_chat_id == SUPER_USER_ID && text == "/addUser" && super_user_state == "") {
+                if (strcmp(sender_chat_id, SUPER_USER_ID) == 0 && strcmp(text,"/addUser") && strcmp(super_user_state.c_str(), "") == 0) {
                     telegram.sendMessage("Please enter the name of the new user.", SUPER_USER_ID);
                     super_user_state = "add - awaiting username";
-                } else if (sender_chat_id == SUPER_USER_ID && super_user_state == "add - awaiting username") {
+                } else if (strcmp(sender_chat_id, SUPER_USER_ID) == 0 && strcmp(super_user_state.c_str(), "add  - awaiting username") == 0) {
                     username_save = text;
                     telegram.sendMessage((std::string("Please enter the user id for ") + text + ".").c_str(), SUPER_USER_ID);
                     super_user_state = "add - awaiting user id";
-                } else if (sender_chat_id == SUPER_USER_ID && super_user_state == "add - awaiting user id") {
+                } else if (strcmp(sender_chat_id, SUPER_USER_ID) == 0 && strcmp(super_user_state.c_str(), "add - awaiting user id") == 0) {
                     add_user(text, username_save.c_str());
                     telegram.sendMessage("New user initialized successfully.", SUPER_USER_ID);
                     super_user_state = "";
-                } else if (sender_chat_id == SUPER_USER_ID && text == "/removeUser" && super_user_state == "") {
+                } else if (strcmp(sender_chat_id, SUPER_USER_ID) == 0 && strcmp(text, "/removeUser") == 0 && strcmp(super_user_state.c_str(), "") == 0) {
                     telegram.sendMessage("Please enter the user id of the user you would like to remove.", SUPER_USER_ID);
                     super_user_state = "remove - awaiting user id";
-                } else if (sender_chat_id == SUPER_USER_ID && super_user_state == "remove - awaiting user id") {
+                } else if (strcmp(sender_chat_id, SUPER_USER_ID) == 0 && strcmp(super_user_state.c_str(), "remove - awaiting user id") == 0) {
                     bool was_removed = remove_user(text);
                     if (was_removed) {
                     telegram.sendMessage(SUPER_USER_ID, "User successfully removed.");
@@ -168,22 +208,6 @@ void handle_queued_messages_task(void *pvParameters) {
             }
         }
     }
-}
-
-bool is_verified(const char* uid) {
-
-}
-
-void add_user(const char* username, const char* uid) {
-
-}
-
-bool remove_user(const char* uid) {
-
-}
-
-const char* get_name(const char* uid) {
-
 }
 
 void print_default() {
