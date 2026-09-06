@@ -99,6 +99,9 @@ void init_wifi(void) {
 }
 
 bool is_verified(const char* uid) {
+    if (strcmp(uid, SUPER_USER_ID) == 0) {
+        return true;
+    }
     size_t required_size = 0;
     esp_err_t err = nvs_get_str(allowed_users, uid, NULL, &required_size);
     if (err == ESP_OK) {
@@ -115,6 +118,7 @@ void add_user(const char* username, const char* uid) {
 
 bool remove_user(const char* uid) {
     esp_err_t err = nvs_erase_key(allowed_users, uid);
+    nvs_commit(allowed_users);
     if (err == ESP_OK) {
         return true;
     } else { 
@@ -123,6 +127,9 @@ bool remove_user(const char* uid) {
 }
 
 const char* get_name(const char* uid) {
+    if (strcmp(uid, SUPER_USER_ID) == 0) {
+        return "Me";
+    }
     size_t required_size = 0;
     esp_err_t err = nvs_get_str(allowed_users, uid, NULL, &required_size);
     if (err == ESP_OK) {
@@ -151,24 +158,24 @@ void handle_queued_messages_task(void *pvParameters) {
     while (1) {
         if (xQueueReceive(telegramQueue, &incomingMsg, portMAX_DELAY) == pdPASS) {
             puts(incomingMsg.text);
-            printer->print_line(incomingMsg.text);
-            printer->print_line("\n\n");
             vTaskDelay(pdMS_TO_TICKS(200));
             //when this actually does different things based on the message it must send back that i am not taking messages if state is 0 (off)
             std::string sender_chat_id_std_string = std::to_string(incomingMsg.senderId);
             const char* sender_chat_id = sender_chat_id_std_string.c_str();
             const char* text = incomingMsg.text;
 
+            puts(sender_chat_id);
+
             if (is_verified(sender_chat_id)) {
-                if (strcmp(sender_chat_id, SUPER_USER_ID) == 0 && strcmp(text,"/addUser") && strcmp(super_user_state.c_str(), "") == 0) {
+                if (strcmp(sender_chat_id, SUPER_USER_ID) == 0 && strcmp(text,"/addUser") == 0 && strcmp(super_user_state.c_str(), "") == 0) {
                     telegram.sendMessage("Please enter the name of the new user.", SUPER_USER_ID);
                     super_user_state = "add - awaiting username";
-                } else if (strcmp(sender_chat_id, SUPER_USER_ID) == 0 && strcmp(super_user_state.c_str(), "add  - awaiting username") == 0) {
+                } else if (strcmp(sender_chat_id, SUPER_USER_ID) == 0 && strcmp(super_user_state.c_str(), "add - awaiting username") == 0) {
                     username_save = text;
                     telegram.sendMessage((std::string("Please enter the user id for ") + text + ".").c_str(), SUPER_USER_ID);
                     super_user_state = "add - awaiting user id";
                 } else if (strcmp(sender_chat_id, SUPER_USER_ID) == 0 && strcmp(super_user_state.c_str(), "add - awaiting user id") == 0) {
-                    add_user(text, username_save.c_str());
+                    add_user(username_save.c_str(), text);
                     telegram.sendMessage("New user initialized successfully.", SUPER_USER_ID);
                     super_user_state = "";
                 } else if (strcmp(sender_chat_id, SUPER_USER_ID) == 0 && strcmp(text, "/removeUser") == 0 && strcmp(super_user_state.c_str(), "") == 0) {
@@ -177,13 +184,13 @@ void handle_queued_messages_task(void *pvParameters) {
                 } else if (strcmp(sender_chat_id, SUPER_USER_ID) == 0 && strcmp(super_user_state.c_str(), "remove - awaiting user id") == 0) {
                     bool was_removed = remove_user(text);
                     if (was_removed) {
-                    telegram.sendMessage(SUPER_USER_ID, "User successfully removed.");
+                        telegram.sendMessage("User successfully removed.", SUPER_USER_ID);
                     } else {
-                    telegram.sendMessage(SUPER_USER_ID, "The user id provided was not tied to a verified user.");
+                        telegram.sendMessage("The user id provided was not tied to a verified user.", SUPER_USER_ID);
                     }
                     super_user_state = "";
                 } else {
-                    if (state) {
+                    if (!state) {
                         std::string time_str = std::to_string(incomingMsg.timeStamp);
                         const char* time = time_str.c_str();
                         printer->print_line("================================");
@@ -293,6 +300,10 @@ extern "C" void app_main(void) {
     init_switch();
 
     xTaskCreate(get_new_messages_task, "TelegramMessageGetterTask", 4096, NULL, 2, NULL);
-    xTaskCreate(handle_queued_messages_task, "MessageHandlerTask", 4096, NULL, 1, NULL);
+    xTaskCreate(handle_queued_messages_task, "MessageHandlerTask", 8192, NULL, 1, NULL);
     xTaskCreate(check_toggle_state_task, "ToggleSwitchStateTask", 4096, NULL, 3, NULL);
+
+    while (1) {
+        vTaskDelay(pdMS_TO_TICKS(1000));
+    }
 }

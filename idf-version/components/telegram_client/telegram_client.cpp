@@ -75,6 +75,8 @@ esp_err_t TelegramClient::getMessages(QueueHandle_t messageQueue, long &offset) 
         return ESP_FAIL;
     }
 
+    puts(response_data.c_str());
+
     cJSON *ok = cJSON_GetObjectItem(root, "ok");
     if (!cJSON_IsTrue(ok)) {
         cJSON_Delete(root);
@@ -97,16 +99,16 @@ esp_err_t TelegramClient::getMessages(QueueHandle_t messageQueue, long &offset) 
         if (messageObj) {
             TelegramMessage outMessage = {};
             cJSON *textObj = cJSON_GetObjectItem(messageObj, "text");
-            cJSON *fromObj = cJSON_GetObjectItem(messageObj, "from");
+            cJSON *chatObj = cJSON_GetObjectItem(messageObj, "chat");
             cJSON *dateObj = cJSON_GetObjectItem(messageObj, "date");
 
             if (textObj && textObj->valuestring) {
                 strncpy(outMessage.text, textObj->valuestring, sizeof(outMessage.text) - 1);
                 outMessage.text[sizeof(outMessage.text) - 1] = '\0';            }
-            if (fromObj) {
-                cJSON *idObj = cJSON_GetObjectItem(fromObj, "id");
+            if (chatObj) {
+                cJSON *idObj = cJSON_GetObjectItem(chatObj, "id");
                 if (idObj) {
-                    outMessage.senderId = (long)idObj->valuedouble;
+                    outMessage.senderId = (int64_t)idObj->valuedouble;
                 }
             }
             if (dateObj) {

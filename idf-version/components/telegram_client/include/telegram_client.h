@@ -7,7 +7,7 @@
 
 struct TelegramMessage {
     char text[256];
-    long senderId;
+    int64_t senderId;
     long timeStamp;
     long updateId;
 };
